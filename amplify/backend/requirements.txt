@@ -1,0 +1,21 @@
+# FastAPIのメインフレームワーク
+fastapi
+
+# ASGIサーバー (FastAPIの実行に必要)
+uvicorn
+
+# GoogleカレンダーAPIやHTTPリクエスト用
+requests
+
+# ChatGPT APIの利用
+openai
+
+# 環境変数の管理
+python-dotenv
+
+# Excelファイルの処理
+pandas
+openpyxl
+
+# ファイルアップロードのmultipart/form-data処理
+python-multipart
