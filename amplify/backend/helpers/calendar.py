@@ -2,7 +2,7 @@ import requests
 import os
 
 # 環境変数からGAS URLを取得
-GAS_URL = os.getenv("GAS_URL")
+GAS_URL = os.getenv("REACT_APP_GAS_URL")
 
 def handle_calendar_action(action, summary=None, start=None, end=None, event_id=None):
     payload = {

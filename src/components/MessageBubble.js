@@ -1,6 +1,6 @@
 import React from 'react';
 
-const MessageBubble = ({ role, content, isLoading }) => (
+const MessageBubble = ({ role, content }) => (
     <div className={`message-bubble-container ${role}`}>
         {role === 'bot' && (
             <img

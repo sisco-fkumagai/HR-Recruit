@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import MessageBubble from './MessageBubble';
 
@@ -6,16 +6,19 @@ const ChatBot = () => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [currentTask, setCurrentTask] = useState(null); // 現在のタスクを追跡
-    const [isComposing, setIsComposing] = useState(false); // 変換中かどうかを追跡
     const [selectedFile, setSelectedFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isComposing, setIsComposing] = useState(false); // 変換中かどうかを追跡
 
-    // GAS URLの取得（環境変数）
-    const GAS_URL = process.env.REACT_APP_GAS_URL;
+    const fileInputRef = useRef(null);
+
+    // 環境変数からバックエンドAPI URLを取得
+    const apiUrl = process.env.REACT_APP_BACKEND_API_URL || 'http://127.0.0.1:8080';
 
     // 初期化処理
     useEffect(() => {
         setMessages([
-            { role: 'bot', content: "面接日程とFAQどちらの編集をしますか？" },
+            { role: 'bot', content: "以下のどちらの編集をしますか？ \n 1. 日程調整 \n 2. FAQ" },
         ]);
     }, []);
 
@@ -30,17 +33,18 @@ const ChatBot = () => {
 
         // ユーザーのメッセージを追加
         const userMessage = { role: 'user', content: input };
-        setMessages([...messages, userMessage]);
+        setMessages((prev) => [...prev, userMessage]);
         setInput(''); // 入力欄をクリア
 
         if (!currentTask) {
-            if (input.toLowerCase().includes('faq')) {
+            // ユーザーの選択に応じてタスクを設定
+            if (/faq|2/i.test(input)) {
                 setCurrentTask('faq');
                 setMessages((prev) => [
                     ...prev,
                     { role: 'bot', content: 'FAQファイルをアップロードしてください。' },
                 ]);
-            } else if (input.toLowerCase().includes('日程') || input.toLowerCase().includes('カレンダー')) {
+            } else if (/日程|カレンダー|1/i.test(input)) {
                 setCurrentTask('calendar');
                 setMessages((prev) => [
                     ...prev,
@@ -49,23 +53,22 @@ const ChatBot = () => {
             } else {
                 setMessages((prev) => [
                     ...prev,
-                    { role: 'bot', content: '対応していない操作です。もう一度選択してください。' },
+                    { role: 'bot', content: '対応していない操作です。もう一度選択してください。(1: 日程調整, 2: FAQ)' },
                 ]);
             }
         } else {
-            // サーバーとの通信
             try {
-                const response = await axios.post(`${GAS_URL}/chat`, {
+                const response = await axios.post(`${apiUrl}/chat`, {
                     message: input,
                     context: messages.map((msg) => ({
                         role: msg.role,
                         content: msg.content,
                     })),
                 });
-
-                // サーバーの応答を追加
-                const botMessage = { role: 'bot', content: response.data.reply };
-                setMessages((prev) => [...prev, botMessage]);
+                setMessages((prev) => [
+                    ...prev,
+                    { role: 'bot', content: response.data.reply },
+                ]);
             } catch (error) {
                 console.error('エラー:', error.response?.data || error.message);
                 setMessages((prev) => [
@@ -78,24 +81,49 @@ const ChatBot = () => {
 
     // ファイルアップロード処理
     const handleFileUpload = async () => {
-        if (!selectedFile) return;
+        if (!selectedFile) {
+            setMessages((prev) => [
+                ...prev,
+                { role: 'bot', content: 'ファイルを選択してください。' },
+            ]);
+            return;
+        }
 
+        const endpoint = currentTask === 'faq' ? 'faq' : 'calendar';
         const formData = new FormData();
-        formData.append('file', selectedFile); // キー名をバックエンドと一致させる
+        formData.append('file', selectedFile);
 
         try {
-            const response = await axios.post(`${GAS_URL}/calendar`, formData, {
+            const userMessage = {
+                role: 'user',
+                content: `ファイル「${selectedFile.name}」をアップロードしました。`,
+            };
+            setMessages((prev) => [...prev, userMessage]);
+
+            const response = await axios.post(`${apiUrl}${endpoint}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
-            const successMessage = `アップロード成功: ${response.data.message}`;
-            setMessages((prev) => [...prev, { role: 'bot', content: successMessage }]);
+
+            setMessages((prev) => [
+                ...prev,
+                { role: 'bot', content: `アップロード成功: ${response.data.message}` },
+
+            ]);
+            // ファイル入力をリセット
+            setSelectedFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''; // <input type="file"> の値をリセット
+            }
         } catch (error) {
-            const errorMessage = error.response?.data?.detail || 'アップロードに失敗しました。';
-            setMessages((prev) => [...prev, { role: 'bot', content: errorMessage }]);
+            setMessages((prev) => [
+                ...prev,
+                { role: 'bot', content: 'ファイルアップロードに失敗しました。' },
+            ]);
         } finally {
-            setSelectedFile(null); // 選択ファイルのリセット
+            setIsUploading(false);
         }
     };
+
 
     // Enterキーでメッセージ送信
     const handleKeyDown = (e) => {
@@ -114,19 +142,21 @@ const ChatBot = () => {
             </div>
             <div className="input-container">
                 <div className="file-upload-container">
-                    <label htmlFor="file-upload" className="file-upload-label">
-                        ファイルを選択
-                    </label>
                     <input
-                        id="file-upload"
                         type="file"
                         accept=".xlsx"
                         onChange={(e) => setSelectedFile(e.target.files[0])}
+                        ref={fileInputRef} // ここで参照を設定
+                        id="file-upload"
                         style={{ display: 'none' }}
                     />
+                    <label htmlFor="file-upload" className="file-upload-label">
+                        ファイルを選択
+                    </label>
+                    {/* ファイル名を表示し、アップロード後は非表示に */}
                     {selectedFile && <span>{selectedFile.name}</span>}
-                    <button onClick={handleFileUpload} disabled={!selectedFile}>
-                        アップロード
+                    <button onClick={handleFileUpload} disabled={!selectedFile || isUploading}>
+                        {isUploading ? 'アップロード中...' : 'アップロード'}
                     </button>
                 </div>
                 <div className="text-input">

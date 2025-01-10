@@ -7,7 +7,7 @@ from io import BytesIO
 import os
 from dotenv import load_dotenv
 
-# 環境変数の読み込み
+# .envファイルを読み込み
 load_dotenv()
 
 app = FastAPI()
